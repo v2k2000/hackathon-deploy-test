@@ -151,6 +151,28 @@ div[role="radiogroup"] label p {
   color: #111827 !important;
 }
 
+.stButton > button[data-testid="stBaseButton-primary"] {
+  background: #16a34a !important;
+  border: 1px solid #15803d !important;
+  color: #ffffff !important;
+}
+
+.stButton > button[kind="primary"] {
+  background: #16a34a !important;
+  border: 1px solid #15803d !important;
+  color: #ffffff !important;
+}
+
+.stButton > button[data-testid="stBaseButton-primary"]:hover {
+  background: #15803d !important;
+  border-color: #166534 !important;
+}
+
+.stButton > button[kind="primary"]:hover {
+  background: #15803d !important;
+  border-color: #166534 !important;
+}
+
 .axis-note {
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -309,7 +331,7 @@ JSON 스키마:
 모드 규칙:
 - mode="고정": 기존 셀 내용을 유지.
 - mode="입력": manual_input이 있으면 그 내용을 우선 반영해 2~3문장으로 정리.
-- mode="비우기": 빈 문자열("")로 반환.
+- mode="재생성": 현재 셀을 비워 새 관점으로 다시 작성.
 - cell_feedback, 전체 피드백을 반영해 품질을 높여라.
 - 문체는 함축적 요약 톤으로 유지.
 
@@ -463,6 +485,8 @@ def init_session_state() -> None:
         feedback_key = f"feedback_{cell_id}"
         if mode_key not in st.session_state:
             st.session_state[mode_key] = "고정"
+        elif st.session_state[mode_key] == "비우기":
+            st.session_state[mode_key] = "재생성"
         if manual_key not in st.session_state:
             st.session_state[manual_key] = ""
         if feedback_key not in st.session_state:
@@ -489,7 +513,7 @@ init_session_state()
 st.title("Structo AI")
 st.caption("문제를 9개의 관점으로 정위(定位)해 전략으로 바꿉니다.")
 st.markdown(
-    '<div class="axis-note"><b>축 안내</b> · 행: 진단 → 설계 → 실행 / 열: 사용자 → 해결 → 비즈니스 / 모드: 입력 · 고정 · 비우기</div>',
+    '<div class="axis-note"><b>축 안내</b> · 행: 진단 → 설계 → 실행 / 열: 사용자 → 해결 → 비즈니스 / 모드: 입력 · 고정 · 재생성</div>',
     unsafe_allow_html=True,
 )
 
@@ -594,7 +618,7 @@ if st.session_state.generated:
         unsafe_allow_html=True,
     )
     st.caption(
-        "입력: 직접 내용 반영 | 고정: 현재 셀 유지 | 비우기: 셀을 공란으로 유지. "
+        "입력: 직접 내용 반영 | 고정: 현재 셀 유지 | 재생성: 해당 셀 새로 작성. "
         "필요하면 셀별 피드백을 적고 재생성하세요."
     )
 
@@ -614,7 +638,7 @@ if st.session_state.generated:
                 st.markdown(f"**{meta['col']} · {meta['label']}**")
                 st.selectbox(
                     "모드",
-                    options=["고정", "입력", "비우기"],
+                    options=["고정", "입력", "재생성"],
                     key=f"mode_{cell_id}",
                     label_visibility="collapsed",
                 )
@@ -658,11 +682,25 @@ if st.session_state.generated:
 
     if refine_clicked:
         controls: dict[str, dict[str, str]] = {}
+        auto_regen_cells: list[str] = []
         for cell_id in CELL_IDS:
+            selected_mode = st.session_state[f"mode_{cell_id}"]
+            feedback = st.session_state[f"feedback_{cell_id}"].strip()
+            manual_input = st.session_state[f"manual_{cell_id}"].strip()
+
+            if selected_mode == "비우기":
+                selected_mode = "재생성"
+
+            effective_mode = selected_mode
+            if selected_mode == "고정" and feedback:
+                effective_mode = "재생성"
+                auto_regen_cells.append(cell_id)
+
             controls[cell_id] = {
-                "mode": st.session_state[f"mode_{cell_id}"],
-                "manual_input": st.session_state[f"manual_{cell_id}"].strip(),
-                "cell_feedback": st.session_state[f"feedback_{cell_id}"].strip(),
+                "mode": effective_mode,
+                "selected_mode": st.session_state[f"mode_{cell_id}"],
+                "manual_input": manual_input,
+                "cell_feedback": feedback,
             }
 
         try:
@@ -682,10 +720,10 @@ if st.session_state.generated:
                 mode = controls[cell_id]["mode"]
                 if mode == "고정":
                     new_cells[cell_id] = st.session_state.cells[cell_id]
-                elif mode == "비우기":
-                    new_cells[cell_id] = ""
                 elif mode == "입력" and controls[cell_id]["manual_input"]:
                     new_cells[cell_id] = controls[cell_id]["manual_input"]
+                elif mode == "재생성" and not new_cells[cell_id].strip():
+                    new_cells[cell_id] = st.session_state.cells[cell_id]
 
             new_summary = result["summary"]
             if not any(new_summary["mvp_features"]) and not any(new_summary["revenue_models"]) and not any(new_summary["top_risks"]):
@@ -703,6 +741,11 @@ if st.session_state.generated:
                 "new_cells": new_cells,
                 "changed_ids": changed_ids,
             }
+
+            if auto_regen_cells:
+                cell_map = {item["id"]: item for item in CELL_DEFS}
+                names = ", ".join(cell_map[cell_id]["label"] for cell_id in auto_regen_cells)
+                st.info(f"셀별 피드백이 입력된 고정 셀은 재생성으로 처리했습니다: {names}")
 
             for cell_id in CELL_IDS:
                 if st.session_state[f"mode_{cell_id}"] != "입력":
