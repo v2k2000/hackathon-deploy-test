@@ -84,6 +84,12 @@ def inject_style() -> None:
     st.markdown(
         """
 <style>
+:root {
+  --background-color: #f3f4f6;
+  --secondary-background-color: #ffffff;
+  --text-color: #111827;
+}
+
 html, body, [class*="st-"] {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
   color: #111827;
@@ -99,6 +105,49 @@ html, body, [class*="st-"] {
 }
 
 h1, h2, h3, h4, p, span, label {
+  color: #111827 !important;
+}
+
+.stTextInput input,
+.stTextArea textarea,
+div[data-baseweb="input"] > div,
+div[data-baseweb="base-input"] > div,
+div[data-baseweb="select"] > div {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+.stTextInput input::placeholder,
+.stTextArea textarea::placeholder {
+  color: #6b7280 !important;
+}
+
+input,
+textarea {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+}
+
+div[data-baseweb="select"] *,
+ul[role="listbox"] *,
+li[role="option"] * {
+  color: #111827 !important;
+}
+
+ul[role="listbox"],
+li[role="option"] {
+  background: #ffffff !important;
+}
+
+div[role="radiogroup"] label {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  padding: 2px 8px !important;
+}
+
+div[role="radiogroup"] label p {
   color: #111827 !important;
 }
 
@@ -129,15 +178,20 @@ h1, h2, h3, h4, p, span, label {
   line-height: 1.45;
 }
 
-div[data-testid="stMarkdownContainer"] table {
-  border-collapse: collapse;
-  width: 100%;
+.nine-grid {
   border: 1px solid #cbd5e1;
-  overflow: hidden;
   border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
 }
 
-div[data-testid="stMarkdownContainer"] th {
+.nine-grid table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0;
+}
+
+.nine-grid th {
   background: #1f2937;
   color: #f9fafb;
   border: 1px solid #1f2937;
@@ -145,11 +199,27 @@ div[data-testid="stMarkdownContainer"] th {
   text-align: left;
 }
 
-div[data-testid="stMarkdownContainer"] td {
+.nine-grid td {
   background: #ffffff;
   border: 1px solid #cbd5e1;
   padding: 10px;
   vertical-align: top;
+}
+
+.nine-grid td.changed {
+  background: #fff7d6;
+  border: 2px solid #d97706;
+}
+
+.changed-chip {
+  display: inline-block;
+  background: #fff7d6;
+  border: 1px solid #d97706;
+  border-radius: 999px;
+  color: #92400e;
+  padding: 3px 10px;
+  margin: 2px 6px 2px 0;
+  font-size: 0.82rem;
 }
 </style>
         """,
@@ -332,26 +402,39 @@ def fallback_summary_from_cells(cells: dict[str, str]) -> dict[str, list[str]]:
     }
 
 
-def render_markdown_table(cells: dict[str, str]) -> str:
+def render_html_table(cells: dict[str, str], highlight_ids: set[str] | None = None) -> str:
     cell_map = {item["id"]: item for item in CELL_DEFS}
     row_ids = [
         ["diag_user", "diag_solution", "diag_business"],
         ["design_user", "design_solution", "design_business"],
         ["exec_user", "exec_solution", "exec_business"],
     ]
-    header = "| 단계 | 사용자 | 해결 | 비즈니스 |\n|---|---|---|---|\n"
-    rows = []
+    highlight_ids = highlight_ids or set()
+    rows = [
+        "<div class='nine-grid'>",
+        "<table>",
+        "<thead>",
+        "<tr><th>단계</th><th>사용자</th><th>해결</th><th>비즈니스</th></tr>",
+        "</thead>",
+        "<tbody>",
+    ]
     for ids in row_ids:
         row_name = cell_map[ids[0]]["row"]
-        col_values = []
+        col_values: list[str] = []
         for cell_id in ids:
             escaped = html.escape(cells.get(cell_id, "")).replace("|", "\\|").replace(
                 "\n", "<br>"
             )
             label = cell_map[cell_id]["label"]
-            col_values.append(f"**{label}**<br>{escaped if escaped else '(비어 있음)'}")
-        rows.append(f"| **{row_name}** | {col_values[0]} | {col_values[1]} | {col_values[2]} |")
-    return header + "\n".join(rows)
+            cell_class = "changed" if cell_id in highlight_ids else ""
+            col_values.append(
+                f"<td class='{cell_class}'><b>{label}</b><br>{escaped if escaped else '(비어 있음)'}</td>"
+            )
+        rows.append(
+            f"<tr><td><b>{row_name}</b></td>{col_values[0]}{col_values[1]}{col_values[2]}</tr>"
+        )
+    rows.extend(["</tbody>", "</table>", "</div>"])
+    return "".join(rows)
 
 
 def init_session_state() -> None:
@@ -371,6 +454,8 @@ def init_session_state() -> None:
         st.session_state.target_input = ""
     if "global_feedback" not in st.session_state:
         st.session_state.global_feedback = ""
+    if "latest_refine" not in st.session_state:
+        st.session_state.latest_refine = None
 
     for cell_id in CELL_IDS:
         mode_key = f"mode_{cell_id}"
@@ -457,6 +542,7 @@ if initial_clicked:
                 result = call_generation(client=client, model=model, user_prompt=prompt)
             st.session_state.cells = result["cells"]
             st.session_state.summary = result["summary"]
+            st.session_state.latest_refine = None
             st.session_state.generated = True
             for cell_id in CELL_IDS:
                 st.session_state[f"mode_{cell_id}"] = "고정"
@@ -487,7 +573,7 @@ if initial_clicked:
 
 if st.session_state.generated:
     st.markdown("### 3×3 전략 프레임워크")
-    st.markdown(render_markdown_table(st.session_state.cells), unsafe_allow_html=True)
+    st.markdown(render_html_table(st.session_state.cells), unsafe_allow_html=True)
 
     st.markdown("### 요약 블록")
     summary_cols = st.columns(3, gap="medium")
@@ -580,6 +666,7 @@ if st.session_state.generated:
             }
 
         try:
+            prev_cells = dict(st.session_state.cells)
             prompt = build_refine_prompt(
                 problem=st.session_state.problem_input.strip(),
                 target=st.session_state.target_input.strip(),
@@ -604,13 +691,24 @@ if st.session_state.generated:
             if not any(new_summary["mvp_features"]) and not any(new_summary["revenue_models"]) and not any(new_summary["top_risks"]):
                 new_summary = fallback_summary_from_cells(new_cells)
 
+            changed_ids = [
+                cell_id
+                for cell_id in CELL_IDS
+                if prev_cells.get(cell_id, "").strip() != new_cells.get(cell_id, "").strip()
+            ]
+
             st.session_state.cells = new_cells
             st.session_state.summary = new_summary
+            st.session_state.latest_refine = {
+                "new_cells": new_cells,
+                "changed_ids": changed_ids,
+            }
 
             for cell_id in CELL_IDS:
                 if st.session_state[f"mode_{cell_id}"] != "입력":
                     st.session_state[f"manual_{cell_id}"] = st.session_state.cells[cell_id]
             st.success("재수정 결과가 반영되었습니다.")
+            st.rerun()
         except AuthenticationError as e:
             st.error("인증 실패: API 키가 잘못됐거나 만료되었습니다.")
             st.code(str(e))
@@ -632,5 +730,30 @@ if st.session_state.generated:
         except Exception as e:
             st.error("알 수 없는 오류가 발생했습니다.")
             st.code(str(e))
+
+    latest_refine = st.session_state.get("latest_refine")
+    if isinstance(latest_refine, dict) and latest_refine.get("new_cells"):
+        changed_ids = latest_refine.get("changed_ids", [])
+        cell_map = {item["id"]: item for item in CELL_DEFS}
+        st.markdown("---")
+        st.markdown("### 최근 재수정 결과 (하단 표시)")
+        if changed_ids:
+            chips = []
+            for cell_id in changed_ids:
+                meta = cell_map.get(cell_id, {})
+                chips.append(
+                    f"<span class='changed-chip'>{meta.get('row', '')}/{meta.get('col', '')}: {meta.get('label', cell_id)}</span>"
+                )
+            st.markdown("".join(chips), unsafe_allow_html=True)
+        else:
+            st.info("변경된 셀이 없습니다. 피드백이나 모드를 조정해 다시 재생성하세요.")
+
+        st.markdown(
+            render_html_table(
+                latest_refine["new_cells"],
+                highlight_ids=set(changed_ids),
+            ),
+            unsafe_allow_html=True,
+        )
 else:
     st.info("문제와 타겟을 입력하고 `초기 9셀 생성`을 눌러 시작하세요.")
