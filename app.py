@@ -75,6 +75,7 @@ SYSTEM_PROMPT = """
 너는 스타트업 전략/제품 설계 전문가다.
 출력은 실전성, 검증 가능성, 우선순위가 느껴지도록 작성한다.
 허세는 금지하고, 명확한 가설과 실행 단위를 제시한다.
+문체는 군더더기 없이 함축적 요약 어조로 유지한다.
 응답은 JSON만 반환한다.
 """.strip()
 
@@ -83,71 +84,47 @@ def inject_style() -> None:
     st.markdown(
         """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap');
-
 html, body, [class*="st-"] {
-  font-family: "Manrope", "Noto Sans KR", sans-serif;
+  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+  color: #111827;
 }
 
 .stApp {
-  background: radial-gradient(1200px 800px at 90% -10%, #d6f3ef 0%, #f4f8fb 48%, #f8fafc 100%);
+  background: #f3f4f6;
 }
 
 .block-container {
-  max-width: 1200px;
-  padding-top: 1.8rem;
+  max-width: 1120px;
+  padding-top: 1.2rem;
 }
 
-.hero {
-  background: linear-gradient(135deg, #0f172a 0%, #115e59 100%);
-  border: 1px solid #1f2937;
-  border-radius: 18px;
-  padding: 20px 22px;
-  color: #f8fafc;
-  margin-bottom: 14px;
+h1, h2, h3, h4, p, span, label {
+  color: #111827 !important;
 }
 
-.hero-title {
-  font-size: 1.6rem;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-
-.hero-sub {
-  font-size: 0.95rem;
-  opacity: 0.9;
-}
-
-.axis-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 8px 0 14px 0;
-}
-
-.axis-badge {
+.axis-note {
   background: #ffffff;
-  border: 1px solid #cfe0eb;
-  border-radius: 999px;
-  padding: 5px 12px;
-  font-size: 0.8rem;
-  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 4px 0 14px 0;
+  font-size: 0.9rem;
 }
 
 .control-title {
-  margin-top: 16px;
+  margin-top: 12px;
   margin-bottom: 6px;
   font-weight: 700;
-  color: #0f172a;
+  color: #111827;
 }
 
 .cell-preview {
   background: #ffffff;
-  border: 1px solid #d9e4ec;
-  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
   padding: 10px 12px;
-  min-height: 128px;
-  color: #0f172a;
+  min-height: 120px;
+  color: #111827;
   font-size: 0.9rem;
   line-height: 1.45;
 }
@@ -155,22 +132,22 @@ html, body, [class*="st-"] {
 div[data-testid="stMarkdownContainer"] table {
   border-collapse: collapse;
   width: 100%;
-  border: 1px solid #d6e2eb;
+  border: 1px solid #cbd5e1;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 div[data-testid="stMarkdownContainer"] th {
-  background: #0f766e;
-  color: #f8fafc;
-  border: 1px solid #0f766e;
+  background: #1f2937;
+  color: #f9fafb;
+  border: 1px solid #1f2937;
   padding: 10px;
   text-align: left;
 }
 
 div[data-testid="stMarkdownContainer"] td {
   background: #ffffff;
-  border: 1px solid #d6e2eb;
+  border: 1px solid #cbd5e1;
   padding: 10px;
   vertical-align: top;
 }
@@ -196,15 +173,15 @@ def build_initial_prompt(problem: str, target: str, global_feedback: str) -> str
 JSON 스키마:
 {{
   "cells": {{
-    "diag_user": "2~4문장",
-    "diag_solution": "2~4문장",
-    "diag_business": "2~4문장",
-    "design_user": "2~4문장",
-    "design_solution": "2~4문장",
-    "design_business": "2~4문장",
-    "exec_user": "2~4문장",
-    "exec_solution": "2~4문장",
-    "exec_business": "2~4문장"
+    "diag_user": "2~3문장",
+    "diag_solution": "2~3문장",
+    "diag_business": "2~3문장",
+    "design_user": "2~3문장",
+    "design_solution": "2~3문장",
+    "design_business": "2~3문장",
+    "exec_user": "2~3문장",
+    "exec_solution": "2~3문장",
+    "exec_business": "2~3문장"
   }},
   "summary": {{
     "mvp_features": ["항목1", "항목2", "항목3"],
@@ -214,9 +191,11 @@ JSON 스키마:
 }}
 
 규칙:
-- 각 셀은 구체적 관찰/가설/검증을 포함해 2~4문장으로 작성.
+- 각 셀은 구체적 관찰/가설/검증을 포함해 2~3문장으로 작성.
+- 문장은 짧게 끊고 함축적 요약 어조를 유지.
 - 전체 9셀 중 최소 1회는 대안/비교/트레이드오프를 명시.
 - 과장된 표현 대신 실행 가능한 문장으로 작성.
+- 요약 블록 각 항목은 1문장으로 간결히 작성.
 
 입력:
 문제: {problem}
@@ -259,9 +238,10 @@ JSON 스키마:
 
 모드 규칙:
 - mode="고정": 기존 셀 내용을 유지.
-- mode="입력": manual_input이 있으면 그 내용을 우선 반영해 2~4문장으로 정리.
+- mode="입력": manual_input이 있으면 그 내용을 우선 반영해 2~3문장으로 정리.
 - mode="비우기": 빈 문자열("")로 반환.
 - cell_feedback, 전체 피드백을 반영해 품질을 높여라.
+- 문체는 함축적 요약 톤으로 유지.
 
 입력:
 문제: {problem}
@@ -421,18 +401,10 @@ st.set_page_config(page_title="Structo AI", layout="wide")
 inject_style()
 init_session_state()
 
+st.title("Structo AI")
+st.caption("문제를 9개의 관점으로 정위(定位)해 전략으로 바꿉니다.")
 st.markdown(
-    """
-<div class="hero">
-  <div class="hero-title">Structo AI</div>
-  <div class="hero-sub">문제를 9개의 관점으로 정위(定位)해 전략으로 바꿉니다.</div>
-</div>
-<div class="axis-row">
-  <div class="axis-badge">행: 진단 → 설계 → 실행</div>
-  <div class="axis-badge">열: 사용자 → 해결 → 비즈니스</div>
-  <div class="axis-badge">모드: 입력 / 고정 / 비우기</div>
-</div>
-    """,
+    '<div class="axis-note"><b>축 안내</b> · 행: 진단 → 설계 → 실행 / 열: 사용자 → 해결 → 비즈니스 / 모드: 입력 · 고정 · 비우기</div>',
     unsafe_allow_html=True,
 )
 
@@ -458,7 +430,7 @@ with left:
         placeholder="누가 이 문제를 겪는지 1~2문장으로 입력하세요.",
     )
 with right:
-    model = st.text_input("모델명", value="gpt-4.1-mini")
+    model = st.text_input("모델명", value="gpt-5.2")
     st.text_area(
         "전체 피드백(선택)",
         key="global_feedback",
